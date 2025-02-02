@@ -3,50 +3,50 @@ package main
 import (
 	"log"
 	"net/http"
+	"sync"
 )
 
-// Сервер
-var H host = host{http.NewServeMux(), "localhost:9000"}
-
-// Массив с записанными маршрутами
-var R map[string]http.HandlerFunc = make(map[string]http.HandlerFunc)
+// Глобальный реестр для записи маршрутов
+var R Register = Register{handlers: make(map[string]http.HandlerFunc)}
 
 func main() {
-	HandleRoutes()
-	Host()
+	server := WebServer{http.NewServeMux(), "localhost:9000"}
+
+	server.Handle("/", http.NotFoundHandler())
+	server.HandleRoutes(R)
+	server.ListenAndServe()
 }
 
-// Класс сервера
-type host struct {
+// Класс веб-сервера
+type WebServer struct {
 	*http.ServeMux        // Защита маршрутов
-	ip             string // Адрес сервера
+	address        string // Адрес сервера
+}
+
+// Класс реестра маршрутов
+type Register struct {
+	*sync.Mutex
+	handlers map[string]http.HandlerFunc
 }
 
 // Запускает сервер
-func Host() {
-	log.Println("Hosted")
-	if err := http.ListenAndServe(H.ip, H); err != nil {
+func (s *WebServer) ListenAndServe() {
+	log.Println("Server started at " + s.address)
+	if err := http.ListenAndServe(s.address, s); err != nil {
 		log.Fatalln(err)
 	}
 }
 
-// Задаёт все незаданные пути как 404
-func NotFound() {
-	Route("/", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte("no method"))
-	})
-}
-
 // Инициализирует все записанные маршруты
-func HandleRoutes() {
-	NotFound()
-	for path, handler := range R {
-		H.HandleFunc(path, handler)
+func (s *WebServer) HandleRoutes(r Register) {
+	for path, handler := range r.handlers {
+		s.HandleFunc(path, handler)
 	}
 }
 
 // Записывает путь к функции
-func Route(path string, handler http.HandlerFunc) {
-	R[path] = handler
+func (r *Register) Register(path string, handler http.HandlerFunc) {
+	r.Lock()
+	defer r.Unlock()
+	r.handlers[path] = handler
 }
