@@ -1,19 +1,22 @@
 package main
 
 import (
+	"errors"
 	"log"
 	"net/http"
 	"sync"
+	"time"
 )
 
 // Глобальный реестр для записи маршрутов
-var R Register = Register{handlers: make(map[string]http.HandlerFunc)}
+var R Register = Register{&sync.Mutex{}, make(map[string]http.HandlerFunc)}
+
+var startTimeStamp time.Time = time.Now()
 
 func main() {
 	server := WebServer{http.NewServeMux(), "localhost:9000"}
 
-	server.Handle("/", http.NotFoundHandler())
-	server.HandleRoutes(R)
+	go server.HandleRoutes(R)
 	server.ListenAndServe()
 }
 
@@ -31,7 +34,7 @@ type Register struct {
 
 // Запускает сервер
 func (s *WebServer) ListenAndServe() {
-	log.Println("Server started at " + s.address)
+	log.Printf("Server started at "+s.address+" in %s\n", time.Since(startTimeStamp))
 	if err := http.ListenAndServe(s.address, s); err != nil {
 		log.Fatalln(err)
 	}
@@ -40,13 +43,22 @@ func (s *WebServer) ListenAndServe() {
 // Инициализирует все записанные маршруты
 func (s *WebServer) HandleRoutes(r Register) {
 	for path, handler := range r.handlers {
-		s.HandleFunc(path, handler)
+		go func() {
+			s.HandleFunc(path, handler)
+			log.Println(path + " path handled")
+		}()
 	}
 }
 
 // Записывает путь к функции
-func (r *Register) Register(path string, handler http.HandlerFunc) {
+func (r *Register) Register(path string, handler http.HandlerFunc) error {
 	r.Lock()
 	defer r.Unlock()
+	if r.handlers[path] != nil {
+		log.Println(path + " was registered twice!")
+		return errors.New(path + " path has been already registered!")
+	}
 	r.handlers[path] = handler
+	log.Println(path + " path has registered")
+	return nil
 }
