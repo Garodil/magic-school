@@ -9,14 +9,13 @@ import (
 )
 
 // Глобальный реестр для записи маршрутов
-var R Register = Register{&sync.Mutex{}, make(map[string]http.HandlerFunc)}
+var R Register = Register{&sync.Mutex{}, make(chan Route), make(map[string]http.HandlerFunc)}
 
 var startTimeStamp time.Time = time.Now()
 
 func main() {
 	server := WebServer{http.NewServeMux(), "localhost:9000"}
-
-	go server.HandleRoutes(R)
+	go server.HandleRoutes(&R)
 	server.ListenAndServe()
 }
 
@@ -26,28 +25,31 @@ type WebServer struct {
 	address        string // Адрес сервера
 }
 
-// Класс реестра маршрутов
-type Register struct {
-	*sync.Mutex
-	handlers map[string]http.HandlerFunc
-}
-
 // Запускает сервер
 func (s *WebServer) ListenAndServe() {
-	log.Printf("Server started at "+s.address+" in %s\n", time.Since(startTimeStamp))
+	since := time.Since(startTimeStamp)
+	log.Printf("Server started at "+s.address+" in %s\n", since)
 	if err := http.ListenAndServe(s.address, s); err != nil {
 		log.Fatalln(err)
 	}
 }
 
-// Инициализирует все записанные маршруты
-func (s *WebServer) HandleRoutes(r Register) {
-	for path, handler := range r.handlers {
+// Инициализирует маршруты, запускать как Горутину
+func (s *WebServer) HandleRoutes(r *Register) {
+	for {
+		route := <-r.ch
 		go func() {
-			s.HandleFunc(path, handler)
-			log.Println(path + " path handled")
+			s.HandleFunc(route.path, route.handler)
+			log.Println("[MAIN] a path is set on: " + route.path)
 		}()
 	}
+}
+
+// Класс реестра маршрутов
+type Register struct {
+	*sync.Mutex
+	ch       HandlerChan
+	handlers map[string]http.HandlerFunc
 }
 
 // Записывает путь к функции
@@ -55,10 +57,20 @@ func (r *Register) Register(path string, handler http.HandlerFunc) error {
 	r.Lock()
 	defer r.Unlock()
 	if r.handlers[path] != nil {
-		log.Println(path + " was registered twice!")
-		return errors.New(path + " path has been already registered!")
+		log.Println("path was tried to be registered twice: " + path)
+		return errors.New("the path has been already registered")
 	}
 	r.handlers[path] = handler
-	log.Println(path + " path has registered")
+	log.Println("path is registered: " + path)
+	r.ch <- Route{path, handler}
 	return nil
 }
+
+// Класс маршрута
+type Route struct {
+	path    string
+	handler http.HandlerFunc
+}
+
+// Канал маршрутов
+type HandlerChan chan Route
