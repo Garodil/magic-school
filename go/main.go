@@ -14,19 +14,19 @@ var R Register = Register{&sync.Mutex{}, make(chan Route), make(map[string]http.
 var startTimeStamp time.Time = time.Now()
 
 func main() {
-	server := WebServer{http.NewServeMux(), "localhost:9000"}
-	go server.HandleRoutes(&R)
-	server.ListenAndServe()
+	server := webServer{http.NewServeMux(), "localhost:9000"}
+	go server.handleRoutes(&R)
+	server.listenAndServe()
 }
 
 // Класс веб-сервера
-type WebServer struct {
+type webServer struct {
 	*http.ServeMux        // Защита маршрутов
 	address        string // Адрес сервера
 }
 
 // Запускает сервер
-func (s *WebServer) ListenAndServe() {
+func (s *webServer) listenAndServe() {
 	since := time.Since(startTimeStamp)
 	log.Printf("Server started at "+s.address+" in %s\n", since)
 	if err := http.ListenAndServe(s.address, s); err != nil {
@@ -35,7 +35,7 @@ func (s *WebServer) ListenAndServe() {
 }
 
 // Инициализирует маршруты, запускать как Горутину
-func (s *WebServer) HandleRoutes(r *Register) {
+func (s *webServer) handleRoutes(r *Register) {
 	for {
 		route := <-r.ch
 		go func() {
