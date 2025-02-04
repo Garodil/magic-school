@@ -48,7 +48,7 @@ func (s *webServer) handleRoutes(r *Register) {
 // Класс реестра маршрутов
 type Register struct {
 	*sync.Mutex
-	ch       HandlerChan
+	ch       chan Route
 	handlers map[string]http.HandlerFunc
 }
 
@@ -71,6 +71,3 @@ type Route struct {
 	path    string
 	handler http.HandlerFunc
 }
-
-// Канал маршрутов
-type HandlerChan chan Route
